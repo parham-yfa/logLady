@@ -451,7 +451,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(children: [
                 const Icon(Icons.local_fire_department, size: 18, color: Colors.amber),
                 const SizedBox(width: 8),
-                Text(t('streak_title'), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[400])),
+                Text(t('streak_title'), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[400])),
               ]),
               IconButton(
                 constraints: const BoxConstraints(),
@@ -517,7 +517,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(children: [Icon(icon, size: 18, color: iconColor), const SizedBox(width: 8), Text(title, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[400]))]),
+            Row(children: [Icon(icon, size: 18, color: iconColor), const SizedBox(width: 8), Text(title, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[400]))]),
             if (description != null) // Only shows 'i' if description is provided
               IconButton(
                 constraints: const BoxConstraints(),
