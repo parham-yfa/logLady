@@ -86538,12 +86538,12 @@ k=n.cI("wks")}if(n.w===2){l=a.h(0,"streak_monthly")
 k=n.cI("mos")}s=A.eA(24)
 r=A.c([new A.du(0,B.cK,A.aq(10,B.m.B()>>>16&255,B.m.B()>>>8&255,B.m.B()&255),B.lb,20)],t.sq)
 q=t.E
-p=A.fR(A.c([A.fR(A.c([B.HG,B.Am,A.bx(n.cI("streak_title"),m,m,m,A.rq().$3$color$fontSize$fontWeight(B.fZ,14,B.cV),m,m)],q),B.af,B.aU,B.ak),A.Lg(B.ew,B.ow,m,m,new A.amh(n),B.Z,m,m)],q),B.af,B.cv,B.ak)
+p=A.fR(A.c([A.fR(A.c([B.HG,B.Am,A.bx(n.cI("streak_title"),m,m,m,A.rq().$3$color$fontSize$fontWeight(B.fZ,12,B.cV),m,m)],q),B.af,B.aU,B.ak),A.Lg(B.ew,B.ow,m,m,new A.amh(n),B.Z,m,m)],q),B.af,B.cv,B.ak)
 o=A.rq().$2$color$fontWeight(B.m,B.aT)
 return A.eT(m,A.jl(A.c([p,B.fy,A.aeu(m,m,m,B.cA,m,m,!0,m,A.dq(A.c([A.dq(m,m,m,m,m,m,m,m,m,B.SV,""+l),A.dq(m,m,m,m,m,m,m,m,m,B.Ud," "+k)],t.VO),m,m,m,m,m,m,m,m,o,m),B.aC,m,m,B.aK,B.aX),B.fy,A.fR(A.c([n.DA(n.cI("daily"),0),n.DA(n.cI("weekly"),1),n.DA(n.cI("monthly"),2)],q),B.af,B.cv,B.ak)],q),B.b3,B.ak),B.w,m,m,new A.cp(B.k,m,m,s,r,m,B.av),m,m,m,B.k0,m,m,m)},
 DA(a,b){var s=null,r=this.w===b,q=r?B.m:B.ny,p=A.eA(12)
 return A.mt(s,A.eT(s,A.bx(a,s,s,s,A.hq(s,s,r?B.k:B.c8,s,s,s,s,s,s,s,s,10,s,s,B.aT,s,s,!0,s,s,s,s,s,s,s,s),s,s),B.w,s,s,new A.cp(q,s,s,p,s,s,B.av),s,s,s,B.nY,s,s,s),B.ap,!1,s,s,s,s,s,s,s,s,s,s,s,s,s,s,new A.amk(this,b),s,s,s,s,s,s)},
-Dz(a,b,c,d,e){var s=null,r=A.eA(24),q=A.c([new A.du(0,B.cK,A.aq(10,B.m.B()>>>16&255,B.m.B()>>>8&255,B.m.B()&255),B.lb,20)],t.sq),p=t.E,o=A.c([A.fR(A.c([A.a61(c,d,s,18),B.Am,A.bx(e,s,s,s,A.rq().$3$color$fontSize$fontWeight(B.fZ,14,B.cV),s,s)],p),B.af,B.aU,B.ak)],p)
+Dz(a,b,c,d,e){var s=null,r=A.eA(24),q=A.c([new A.du(0,B.cK,A.aq(10,B.m.B()>>>16&255,B.m.B()>>>8&255,B.m.B()&255),B.lb,20)],t.sq),p=t.E,o=A.c([A.fR(A.c([A.a61(c,d,s,18),B.Am,A.bx(e,s,s,s,A.rq().$3$color$fontSize$fontWeight(B.fZ,12,B.cV),s,s)],p),B.af,B.aU,B.ak)],p)
 o.push(A.Lg(B.ew,B.ow,s,s,new A.ami(this,e,b),B.Z,s,s))
 return A.eT(s,A.jl(A.c([A.fR(o,B.af,B.cv,B.ak),B.Rs,a],p),B.b3,B.ak),B.w,s,s,new A.cp(B.k,s,s,r,q,s,B.av),s,s,s,B.k0,s,s,s)},
 SL(a,b){var s=this.c
