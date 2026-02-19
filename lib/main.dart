@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 // ---------------------------------------------------------
 // 🚀 INITIALIZATION
@@ -46,13 +47,12 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
   // ---------------------------------------------------------
   // 🎛️ CONFIGURATION: LEGACY STARTING POINTS
   // ---------------------------------------------------------
   final int legacyStreakDays = 5000;     // She starts with a 12-day streak
   final int legacyStackCount = 50;     // She has done double-sessions 25 times before
-  final double legacyVelocity = 95;  // Her starting "Momentum Score"
   
   // ---------------------------------------------------------
   // 🌍 LOCALIZATION ENGINE
@@ -84,12 +84,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'consistency': 'consistency',
         'double_sessions': 'Double sessions',
         'tip_shield': 'Tip: Select "Rest" to use Shield Protection',
-        'daily': 'Daily', 'weekly': 'Wkly', 'monthly': 'Mthly',
-        'days': 'days', 'wks': 'wks', 'mos': 'mos',
+        'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly',
+        'days': 'days', 'wks': 'weeks', 'mos': 'months',
         'streak_desc': 'The number of consecutive days, weeks, or months you have logged activity.',
         'momentum_desc': 'A weighted score based on your activity frequency over the last 30 days.',
         'anchor_desc': 'The 2-hour time window where you are most consistent with your sessions.',
         'stacking_desc': 'The total count of days where you performed more than one activity.',
+        'weekly_activity': 'Weekly Activity (mins)',
       },
       'tr': {
         'good_morning': 'Log Lady Günaydın,',
@@ -115,11 +116,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'double_sessions': 'Çift antrenman',
         'tip_shield': 'İpucu: Seriyi korumak için "Rest" seçin',
         'daily': 'Günlük', 'weekly': 'Hft', 'monthly': 'Aylık',
-        'days': 'gün', 'wks': 'hf', 'mos': 'ay',
+        'days': 'gün', 'wks': 'hafta', 'mos': 'ay',
         'streak_desc': 'Aktivite kaydettiğiniz ardışık gün, hafta veya ay sayısı.',
         'momentum_desc': 'Son 30 gündeki aktivite sıklığınıza dayalı ağırlıklı bir puan.',
         'anchor_desc': 'Antrenmanlarınızda en tutarlı olduğunuz 2 saatlik zaman aralığı.',
         'stacking_desc': 'Birden fazla aktivite yaptığınız toplam gün sayısı.',
+        'weekly_activity': 'Haftalık Aktivite (dk)',
       }
     };
     return dict[_isTurkish ? 'tr' : 'en']![key] ?? key;
@@ -128,12 +130,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ---------------------------------------------------------
   // 📊 STATE VARIABLES
   // ---------------------------------------------------------
-  int _streakTabIndex = 0; // 0=Daily, 1=Weekly, 2=Monthly
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   
   // Default Tags
   List<String> _activityTags = ['Yoga', 'HIIT', 'Walk', 'Run', 'Pilates', 'Weights', 'Swim', 'Rest'];
+  
+  late AnimationController _chartController;
+  late Animation<double> _chartAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _chartController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _chartAnimation = CurvedAnimation(parent: _chartController, curve: Curves.easeOutQuart);
+    _chartController.forward();
+  }
+
+  @override
+  void dispose() {
+    _chartController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,17 +160,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .stream(primaryKey: ['id'])
         .order('activity_date', ascending: false);
 
-    return Scaffold(
-      body: SafeArea(
-        child: StreamBuilder<List<Map<String, dynamic>>>(
-          stream: logStream,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            
-            final logs = snapshot.data!;
-            final metrics = _calculateSmartMetrics(logs);
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: logStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        
+        final logs = snapshot.data!;
+        final historicalTags = logs.map((e) => e['type'] as String).toSet();
+        final metrics = _calculateSmartMetrics(logs);
 
-            return CustomScrollView(
+        return Scaffold(
+          body: SafeArea(
+            child: CustomScrollView(
               slivers: [
                 // HEADER & LANGUAGE TOGGLE
                 SliverToBoxAdapter(
@@ -198,32 +217,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       
-                      // ROW 1: MULTI-TIER STREAK & VELOCITY
+                      // ROW 1: DAILY & WEEKLY STREAKS
                       Row(
                         children: [
-                          Expanded(child: _buildInteractiveStreakCard(metrics)),
+                          Expanded(
+                            child: _buildSmartCard(
+                              title: t('daily'),
+                              icon: Icons.local_fire_department,
+                              iconColor: Colors.orange,
+                              description: t('streak_desc'),
+                              content: Text("${metrics['streak_daily']} ${t('days')}", style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildSmartCard(
-                              title: t('momentum'),
-                              icon: Icons.speed,
-                              iconColor: Colors.blueAccent,
-                              description: t('momentum_desc'), // Added this
+                              title: t('weekly'),
+                              icon: Icons.calendar_view_week,
+                              iconColor: Colors.deepOrange,
+                              description: t('streak_desc'),
+                              content: Text("${metrics['streak_weekly']} ${t('weeks')}", style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ROW 2: MONTHLY STREAK & HABIT STACKING
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildSmartCard(
+                              title: t('monthly'),
+                              icon: Icons.calendar_month,
+                              iconColor: Colors.red,
+                              description: t('streak_desc'),
+                              content: Text("${metrics['streak_monthly']} ${t('months')}", style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildSmartCard(
+                              title: t('stacking'),
+                              icon: Icons.layers,
+                              iconColor: Colors.pinkAccent,
+                              description: t('stacking_desc'),
                               content: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  SizedBox(
-                                    height: 50,
-                                    child: CustomPaint(painter: LineChartPainter(logs: logs), size: const Size(double.infinity, 50)),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(t('velocity'), style: GoogleFonts.inter(fontSize: 10, color: Colors.grey)),
-                                      Text("${metrics['velocity'].toInt()}", 
-                                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: _getVelocityColor(metrics['velocity']))),
-                                    ],
-                                  )
+                                  Text("${metrics['stacks']}", style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.bold)),
+                                  Text(t('double_sessions'), style: GoogleFonts.inter(fontSize: 12, color: Colors.grey)),
                                 ],
                               ),
                             ),
@@ -231,47 +274,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      // ROW 2: ROUTINE ANCHOR
-                      _buildSmartCard(
-                        title: t('anchor'),
-                        icon: Icons.schedule,
-                        iconColor: Colors.purpleAccent,
-                        description: t('anchor_desc'), // Added this
-                        content: Row(
-                          children: [
-                            Container(
-                              height: 45, width: 45,
-                              decoration: BoxDecoration(color: Colors.purple.withAlpha(20), shape: BoxShape.circle),
-                              child: const Icon(Icons.wb_twilight, color: Colors.purple),
-                            ),
-                            const SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text("${t('window')}: ${metrics['anchor_time']}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                Text("${metrics['anchor_pct']}% ${t('consistency')}", style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // ROW 3: HABIT STACKING
-                      _buildSmartCard(
-                        title: t('stacking'),
-                        icon: Icons.layers,
-                        iconColor: Colors.pinkAccent,
-                        description: t('stacking_desc'), // Added this
-                        content: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("${metrics['stacks']}", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                            Text(t('double_sessions'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                          ],
-                        ),
-                      ),
+                      
+                      // WEEKLY ACTIVITY CHART
+                      _buildActivityChart(logs),
                       const SizedBox(height: 12),
 
                       // CALENDAR
@@ -291,9 +296,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           },
                           calendarFormat: CalendarFormat.twoWeeks, 
                           calendarStyle: const CalendarStyle(
-                            todayDecoration: BoxDecoration(color: Colors.black, shape: BoxShape.circle),
+                            todayDecoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                             selectedDecoration: BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-                            markerDecoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                          ),
+                          calendarBuilders: CalendarBuilders(
+                            markerBuilder: (context, day, events) {
+                              if (events.isEmpty) return null;
+                              return Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: events.take(4).map((e) {
+                                  final log = e as Map<String, dynamic>;
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                    width: 6, height: 6,
+                                    decoration: BoxDecoration(
+                                      color: _getActivityColor(log['type'].toString()),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  );
+                                }).toList(),
+                              );
+                            },
                           ),
                           eventLoader: (day) {
                             return logs.where((log) => isSameDay(DateTime.parse(log['activity_date']), day)).toList();
@@ -317,7 +340,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       (context, index) {
                         final log = logs[index];
                         final activityType = log['type'].toString();
-                        final isRest = activityType.toLowerCase().contains('rest');
+                        final activityColor = _getActivityColor(activityType);
                         
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
@@ -330,11 +353,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             leading: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: isRest ? Colors.green.withAlpha(25) : Colors.grey.withAlpha(25),
+                                color: activityColor.withAlpha(25),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(_getActivityIcon(activityType), 
-                                color: isRest ? Colors.green : Colors.black87, size: 22),
+                                color: activityColor, size: 22),
                             ),
                             title: Text(activityType, style: const TextStyle(fontWeight: FontWeight.w600)),
                             subtitle: Text("${DateFormat.MMMd().format(DateTime.parse(log['activity_date']))} • ${log['duration']} mins"),
@@ -350,17 +373,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
-            );
-          },
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showSmartLogSheet(context),
-        backgroundColor: const Color(0xFF2D3436),
-        label: Text(t('log_btn'), style: const TextStyle(color: Colors.white)),
-        icon: const Icon(Icons.add, color: Colors.white),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+            ),
+          ),
+          floatingActionButton: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: FloatingActionButton.extended(
+                onPressed: () => _showSmartLogSheet(context, historicalTags),
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                elevation: 0,
+                label: Text(
+                  t('log_btn'),
+                  style: const TextStyle(color: Color(0xFF2D3436), fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                icon: const Icon(Icons.add, color: Color.fromARGB(255, 45, 52, 54)),
+              ),
+            ),
+          ),
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        );
+      },
     );
   }
 
@@ -368,48 +401,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // 🧠 SMART METRIC CALCULATIONS
   // ---------------------------------------------------------
   Map<String, dynamic> _calculateSmartMetrics(List<Map<String, dynamic>> logs) {
-    // 1. STREAK DEPTH (Simplified Logic for Demo)
-    // In a real app, you would iterate dates to find gaps.
-    int daily = legacyStreakDays;
-    // Check if we logged today/yesterday to keep streak alive
-    if (logs.isNotEmpty) {
-      final lastDate = DateTime.parse(logs.first['activity_date']);
-      final diff = DateTime.now().difference(lastDate).inDays;
-      if (diff <= 1) daily += 1; // Fake increment for visual feedback
-    }
-    
-    // 2. MOMENTUM VELOCITY (Rolling Flywheel)
-    DateTime now = DateTime.now();
-    int last7 = logs.where((l) => DateTime.parse(l['activity_date']).isAfter(now.subtract(const Duration(days: 7)))).length;
-    int last30 = logs.where((l) => DateTime.parse(l['activity_date']).isAfter(now.subtract(const Duration(days: 30)))).length;
-    
-    // Shield Logic: 'Rest' days count for streak but add less velocity
-    int restDays = logs.where((l) => (l['type'] as String).contains('Rest')).length;
-    
-    // Algorithm: Base + (Recent * 3) + (Monthly * 0.5) - Decay
-    double velocity = legacyVelocity + (last7 * 2.5) + (last30 * 0.5) + (restDays * 0.2);
-    if (velocity > 100) velocity = 100;
+    // 1. STREAK DEPTH
+    final logDates = logs
+        .map((log) => DateTime.parse(log['activity_date'] as String))
+        .map((date) => DateTime(date.year, date.month, date.day))
+        .toSet();
 
-    // 3. ROUTINE ANCHOR (2-Hour Window)
-    Map<int, int> hourCounts = {};
-    for (var log in logs) {
-      // Use created_at for time of day analysis
-      final dt = DateTime.parse(log['created_at']).toLocal();
-      // Bucket into 2-hour windows (e.g., 6=6-8, 8=8-10)
-      int windowStart = (dt.hour ~/ 2) * 2; 
-      hourCounts[windowStart] = (hourCounts[windowStart] ?? 0) + 1;
-    }
-    
-    String anchorTime = "--";
-    int anchorPct = 0;
-    
-    if (hourCounts.isNotEmpty) {
-      var topWindow = hourCounts.entries.reduce((a, b) => a.value > b.value ? a : b);
-      anchorTime = "${topWindow.key}:00 - ${topWindow.key + 2}:00";
-      anchorPct = ((topWindow.value / logs.length) * 100).toInt();
-    }
+    int currentStreak = 0;
+    if (logDates.isNotEmpty) {
+      DateTime today = DateTime.now();
+      DateTime currentDate = DateTime(today.year, today.month, today.day);
 
-    // 4. HABIT STACKING
+      // A streak is valid if there's a log today or yesterday.
+      // If no log today, we check if the streak ended yesterday.
+      if (!logDates.contains(currentDate)) {
+        currentDate = currentDate.subtract(const Duration(days: 1));
+      }
+
+      // Now, count backwards from the last active day.
+      while (logDates.contains(currentDate)) {
+        currentStreak++;
+        currentDate = currentDate.subtract(const Duration(days: 1));
+      }
+    }
+    
+    // 2. HABIT STACKING
     // Count distinct days that appear more than once
     Map<String, int> dailyFreq = {};
     for (var log in logs) {
@@ -418,13 +434,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     int stacks = legacyStackCount + dailyFreq.values.where((c) => c > 1).length;
 
+    int daily = legacyStreakDays + currentStreak;
+
     return {
       'streak_daily': daily,
       'streak_weekly': (daily / 7).ceil(),
       'streak_monthly': (daily / 30).ceil(),
-      'velocity': velocity,
-      'anchor_time': anchorTime,
-      'anchor_pct': anchorPct,
       'stacks': stacks,
     };
   }
@@ -432,74 +447,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ---------------------------------------------------------
   // 🎨 UI BUILDERS
   // ---------------------------------------------------------
-  Widget _buildInteractiveStreakCard(Map<String, dynamic> metrics) {
-    int val = metrics['streak_daily'];
-    String label = t('days');
-    if (_streakTabIndex == 1) { val = metrics['streak_weekly']; label = t('wks'); }
-    if (_streakTabIndex == 2) { val = metrics['streak_monthly']; label = t('mos'); }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 20, offset: const Offset(0, 8))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(children: [
-                const Icon(Icons.local_fire_department, size: 18, color: Colors.amber),
-                const SizedBox(width: 8),
-                Text(t('streak_title'), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[400])),
-              ]),
-              IconButton(
-                constraints: const BoxConstraints(),
-                padding: EdgeInsets.zero,
-                icon: const Icon(Icons.info_outline, size: 14, color: Colors.grey),
-                onPressed: () => _showInfoDialog(t('streak_title'), t('streak_desc')),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          RichText(
-            text: TextSpan(
-              style: GoogleFonts.inter(color: Colors.black, fontWeight: FontWeight.bold),
-              children: [
-                TextSpan(text: "$val", style: const TextStyle(fontSize: 32)),
-                TextSpan(text: " $label", style: const TextStyle(fontSize: 14, color: Colors.grey)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildTab(t('daily'), 0),
-              _buildTab(t('weekly'), 1),
-              _buildTab(t('monthly'), 2),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTab(String text, int index) {
-    bool isActive = _streakTabIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _streakTabIndex = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.black : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isActive ? Colors.white : Colors.grey)),
-      ),
-    );
-  }
-
   Widget _buildSmartCard({
   required String title, 
   required IconData icon, 
@@ -550,7 +497,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ---------------------------------------------------------
   // 📝 NEW: TAG-BASED ADD LOG SHEET
   // ---------------------------------------------------------
-  void _showSmartLogSheet(BuildContext context) {
+  void _showSmartLogSheet(BuildContext context, Set<String> historicalTags) {
     String selectedTag = "";
     int selectedDuration = 0;
     final customDurationCtrl = TextEditingController();
@@ -564,6 +511,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            final displayTags = {..._activityTags, ...historicalTags}.toList();
+            
             return Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 20),
               child: Column(
@@ -600,16 +549,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8, runSpacing: 8,
-                    children: _activityTags.map((tag) {
+                    children: displayTags.map((tag) {
                       final isSelected = selectedTag == tag;
-                      final isRest = tag.toLowerCase().contains('rest');
-                      return ChoiceChip(
+                      final tagColor = _getActivityColor(tag);
+                      return InputChip(
                         label: Text(tag),
                         selected: isSelected,
-                        selectedColor: isRest ? Colors.green.shade100 : Colors.black,
-                        labelStyle: TextStyle(color: isSelected ? (isRest ? Colors.green.shade900 : Colors.white) : Colors.black),
+                        showCheckmark: false,
+                        selectedColor: tagColor,
+                        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
                         onSelected: (bool selected) {
                           setModalState(() => selectedTag = selected ? tag : "");
+                        },
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        deleteIconColor: isSelected ? Colors.white70 : Colors.grey,
+                        onDeleted: () {
+                          showDialog(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Delete Tag'),
+                              content: Text('Are you sure you want to delete "$tag"?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child: Text(t('cancel')),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() => _activityTags.remove(tag));
+                                    setModalState(() {});
+                                    Navigator.pop(dialogContext);
+                                  },
+                                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
+                            ),
+                          );
                         },
                       );
                     }).toList(),
@@ -693,35 +668,119 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (t.contains('rest')) { return Icons.shield; }
     return Icons.sports_score;
   }
-  
-  Color _getVelocityColor(double v) {
-    if (v > 80) { return Colors.green; }
-    if (v > 50) { return Colors.orange; }
-    return Colors.red;
+
+  Color _getActivityColor(String type) {
+    final t = type.toLowerCase();
+    if (t.contains('yoga')) return Colors.purple;
+    if (t.contains('walk')) return Colors.blue;
+    if (t.contains('run') || t.contains('hiit')) return Colors.orange;
+    if (t.contains('weight') || t.contains('gym') || t.contains('pilates')) return Colors.indigo;
+    if (t.contains('swim')) return Colors.cyan;
+    if (t.contains('rest')) return Colors.green;
+    return Colors.grey;
+  }
+
+  Widget _buildActivityChart(List<Map<String, dynamic>> logs) {
+    List<int> dailyTotals = List.filled(7, 0);
+    List<String> dayLabels = List.filled(7, '');
+    DateTime now = DateTime.now();
+    DateTime today = DateTime(now.year, now.month, now.day);
+
+    for (int i = 0; i < 7; i++) {
+      DateTime d = today.subtract(Duration(days: 6 - i));
+      dayLabels[i] = DateFormat.E().format(d);
+    }
+
+    for (var log in logs) {
+      DateTime logDate = DateTime.parse(log['activity_date']);
+      DateTime date = DateTime(logDate.year, logDate.month, logDate.day);
+      int diff = today.difference(date).inDays;
+      if (diff >= 0 && diff < 7) {
+        dailyTotals[6 - diff] += (log['duration'] as int);
+      }
+    }
+
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(t('weekly_activity'), style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey[800])),
+          const SizedBox(height: 20),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _chartAnimation,
+              builder: (context, child) => CustomPaint(
+                painter: BarChartPainter(dailyTotals, dayLabels, animationValue: _chartAnimation.value),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 } // This closes _DashboardScreenState
 
-// --- MINI CHART PAINTER ---
-class LineChartPainter extends CustomPainter {
-  final List<Map<String, dynamic>> logs;
-  LineChartPainter({required this.logs});
+class BarChartPainter extends CustomPainter {
+  final List<int> values;
+  final List<String> labels;
+  final double animationValue;
+
+  BarChartPainter(this.values, this.labels, {this.animationValue = 1.0});
+
   @override
   void paint(Canvas canvas, Size size) {
-    if (logs.isEmpty) return;
-    Paint paint = Paint()..color = Colors.blueAccent.withAlpha(128)..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
-    var path = Path();
-    double stepX = size.width / 10;
-    var recentLogs = logs.take(10).toList().reversed.toList();
-    if (recentLogs.isEmpty) return;
-    int maxDuration = recentLogs.map((l) => l['duration'] as int).reduce(math.max);
-    if (maxDuration == 0) maxDuration = 100;
-    for (int i = 0; i < recentLogs.length; i++) {
-      double x = i * stepX;
-      double y = size.height - ((recentLogs[i]['duration'] as int) / maxDuration * size.height);
-      if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+    if (values.isEmpty) return;
+
+    final paint = Paint()..color = Colors.red..style = PaintingStyle.fill;
+    final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+
+    int maxVal = values.reduce(math.max);
+    if (maxVal == 0) maxVal = 60;
+
+    double barWidth = (size.width / values.length) * 0.4;
+    double spacing = size.width / values.length;
+    double bottomLabelHeight = 20.0;
+    double topValueHeight = 15.0;
+    double availableBarHeight = size.height - bottomLabelHeight - topValueHeight;
+
+    for (int i = 0; i < values.length; i++) {
+      double barHeight = (values[i] / maxVal) * availableBarHeight * animationValue;
+      double x = i * spacing + (spacing - barWidth) / 2;
+      double y = size.height - bottomLabelHeight - barHeight;
+
+      RRect rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        const Radius.circular(6),
+      );
+      canvas.drawRRect(rect, paint);
+
+      // Draw Value (Minutes)
+      if (values[i] > 0) {
+        textPainter.text = TextSpan(
+          text: '${values[i]}',
+          style: GoogleFonts.inter(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+        );
+        textPainter.layout();
+        textPainter.paint(canvas, Offset(x + (barWidth - textPainter.width) / 2, y - 14));
+      }
+
+      textPainter.text = TextSpan(
+        text: labels[i],
+        style: GoogleFonts.inter(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w500),
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(x + (barWidth - textPainter.width) / 2, size.height - 15));
     }
-    canvas.drawPath(path, paint);
   }
+
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant BarChartPainter oldDelegate) => true;
 }
