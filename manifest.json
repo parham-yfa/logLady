@@ -1,11 +1,11 @@
 {
-    "name": "log_lady",
-    "short_name": "log_lady",
+    "name": "Log Lady",
+    "short_name": "Log Lady",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#2D3436",
+    "theme_color": "#2D3436",
+    "description": "Personal activity and fitness tracker.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
