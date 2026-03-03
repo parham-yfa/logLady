@@ -84,6 +84,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         'consistency': 'consistency',
         'double_sessions': 'Double sessions',
         'tip_shield': 'Tip: Select "Rest" to use Shield Protection',
+        'notes_label': 'Notes', 'notes_hint': 'Optional note...',
+        'edit_log': 'Edit Log', 'update': 'Save Changes', 'delete': 'Delete',
         'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly',
         'days': 'days', 'wks': 'weeks', 'mos': 'months',
         'streak_desc': 'The number of consecutive days, weeks, or months you have logged activity.',
@@ -115,6 +117,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         'consistency': 'tutarlılık',
         'double_sessions': 'Çift antrenman',
         'tip_shield': 'İpucu: Seriyi korumak için "Rest" seçin',
+        'notes_label': 'Notlar', 'notes_hint': 'İsteğe bağlı not...',
+        'edit_log': 'Kaydı Düzenle', 'update': 'Değişiklikleri Kaydet', 'delete': 'Sil',
         'daily': 'Günlük', 'weekly': 'Hft', 'monthly': 'Aylık',
         'days': 'gün', 'wks': 'hafta', 'mos': 'ay',
         'streak_desc': 'Aktivite kaydettiğiniz ardışık gün, hafta veya ay sayısı.',
@@ -319,7 +323,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             },
                           ),
                           eventLoader: (day) {
-                            return logs.where((log) => isSameDay(DateTime.parse(log['activity_date']), day)).toList();
+                            return logs.where((log) => isSameDay(DateTime.parse(log['activity_date']).toLocal(), day)).toList();
                           },
                           headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
                         ),
@@ -350,17 +354,25 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, 4))],
                           ),
                           child: ListTile(
+                            onTap: () => _showEditLogSheet(context, log),
                             leading: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: activityColor.withAlpha(25),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(_getActivityIcon(activityType), 
+                              child: Icon(_getActivityIcon(activityType),
                                 color: activityColor, size: 22),
                             ),
                             title: Text(activityType, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text("${DateFormat.MMMd().format(DateTime.parse(log['activity_date']))} • ${log['duration']} mins"),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("${DateFormat.MMMd().format(DateTime.parse(log['activity_date']).toLocal())} • ${log['duration']} mins"),
+                                if ((log['notes'] ?? '').toString().isNotEmpty)
+                                  Text(log['notes'].toString(), style: TextStyle(color: Colors.grey[500], fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
                             trailing: IconButton(
                               icon: Icon(Icons.delete_outline, color: Colors.grey[400]),
                               onPressed: () async => await Supabase.instance.client.from('activity_logs').delete().match({'id': log['id']}),
@@ -402,26 +414,29 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   // ---------------------------------------------------------
   Map<String, dynamic> _calculateSmartMetrics(List<Map<String, dynamic>> logs) {
     // 1. STREAK DEPTH
-    final logDates = logs
-        .map((log) => DateTime.parse(log['activity_date'] as String))
-        .map((date) => DateTime(date.year, date.month, date.day))
+    String toDateStr(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
+
+    final logDateStrings = logs
+        .map((log) => toDateStr(DateTime.parse(log['activity_date'] as String).toLocal()))
         .toSet();
 
     int currentStreak = 0;
-    if (logDates.isNotEmpty) {
+    if (logDateStrings.isNotEmpty) {
       DateTime today = DateTime.now();
       DateTime currentDate = DateTime(today.year, today.month, today.day);
 
       // A streak is valid if there's a log today or yesterday.
       // If no log today, we check if the streak ended yesterday.
-      if (!logDates.contains(currentDate)) {
-        currentDate = currentDate.subtract(const Duration(days: 1));
+      if (!logDateStrings.contains(toDateStr(currentDate))) {
+        final prev = currentDate.subtract(const Duration(days: 1));
+        currentDate = DateTime(prev.year, prev.month, prev.day);
       }
 
       // Now, count backwards from the last active day.
-      while (logDates.contains(currentDate)) {
+      while (logDateStrings.contains(toDateStr(currentDate))) {
         currentStreak++;
-        currentDate = currentDate.subtract(const Duration(days: 1));
+        final prev = currentDate.subtract(const Duration(days: 1));
+        currentDate = DateTime(prev.year, prev.month, prev.day);
       }
     }
     
@@ -429,7 +444,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     // Count distinct days that appear more than once
     Map<String, int> dailyFreq = {};
     for (var log in logs) {
-      String d = log['activity_date'].toString().split('T')[0];
+      String d = DateTime.parse(log['activity_date'] as String).toLocal().toIso8601String().split('T')[0];
       dailyFreq[d] = (dailyFreq[d] ?? 0) + 1;
     }
     int stacks = legacyStackCount + dailyFreq.values.where((c) => c > 1).length;
@@ -501,6 +516,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     String selectedTag = "";
     int selectedDuration = 0;
     final customDurationCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
     DateTime selectedDate = _selectedDay ?? DateTime.now();
 
     showModalBottomSheet(
@@ -627,15 +643,32 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     },
                   ),
 
+                  const SizedBox(height: 24),
+
+                  // 3. NOTES
+                  Text(t('notes_label'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: notesCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: t('notes_hint'),
+                      filled: true, fillColor: const Color(0xFFF0F2F5),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
                   const SizedBox(height: 30),
-                  
+
                   // SAVE BUTTON
                   ElevatedButton(
                     onPressed: (selectedTag.isEmpty || selectedDuration == 0) ? null : () async {
                       await Supabase.instance.client.from('activity_logs').insert({
-                        'activity_date': selectedDate.toIso8601String(), 
-                        'type': selectedTag, 
-                        'duration': selectedDuration
+                        'activity_date': selectedDate.toIso8601String(),
+                        'type': selectedTag,
+                        'duration': selectedDuration,
+                        if (notesCtrl.text.trim().isNotEmpty) 'notes': notesCtrl.text.trim(),
                       });
                       if (context.mounted) Navigator.pop(context);
                     },
@@ -656,6 +689,146 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       },
     );
   } // This closes _showSmartLogSheet correctly
+
+  // ---------------------------------------------------------
+  // ✏️ EDIT LOG SHEET
+  // ---------------------------------------------------------
+  void _showEditLogSheet(BuildContext context, Map<String, dynamic> log) {
+    final existingDurations = [30, 45, 60, 90];
+    final initialDuration = log['duration'] as int? ?? 0;
+    final hasPreset = existingDurations.contains(initialDuration);
+
+    String selectedTag = log['type'].toString();
+    int selectedDuration = initialDuration;
+    final customDurationCtrl = TextEditingController(text: hasPreset ? '' : initialDuration.toString());
+    final notesCtrl = TextEditingController(text: (log['notes'] ?? '').toString());
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final displayTags = {..._activityTags, selectedTag}.toList();
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)))),
+                  const SizedBox(height: 16),
+                  Text(t('edit_log'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+
+                  // ACTIVITY TYPE
+                  Text(t('activity_label'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8, runSpacing: 8,
+                    children: displayTags.map((tag) {
+                      final isSelected = selectedTag == tag;
+                      final tagColor = _getActivityColor(tag);
+                      return InputChip(
+                        label: Text(tag),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: tagColor,
+                        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
+                        onSelected: (_) => setModalState(() => selectedTag = tag),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // DURATION
+                  Text(t('duration_label'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    children: existingDurations.map((min) {
+                      return ChoiceChip(
+                        label: Text("$min min"),
+                        selected: selectedDuration == min,
+                        onSelected: (s) {
+                          setModalState(() {
+                            selectedDuration = s ? min : 0;
+                            customDurationCtrl.clear();
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: customDurationCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: t('custom_min'),
+                      filled: true, fillColor: const Color(0xFFF0F2F5),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onChanged: (val) => setModalState(() => selectedDuration = int.tryParse(val) ?? 0),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // NOTES
+                  Text(t('notes_label'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: notesCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: t('notes_hint'),
+                      filled: true, fillColor: const Color(0xFFF0F2F5),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // SAVE CHANGES BUTTON
+                  ElevatedButton(
+                    onPressed: (selectedTag.isEmpty || selectedDuration == 0) ? null : () async {
+                      await Supabase.instance.client.from('activity_logs').update({
+                        'type': selectedTag,
+                        'duration': selectedDuration,
+                        'notes': notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                      }).match({'id': log['id']});
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2D3436),
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: Text(t('update'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // DELETE BUTTON
+                  TextButton(
+                    onPressed: () async {
+                      await Supabase.instance.client.from('activity_logs').delete().match({'id': log['id']});
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    child: Text(t('delete'), style: const TextStyle(color: Colors.red)),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   // --- HELPER METHODS ---
   IconData _getActivityIcon(String type) {
@@ -692,7 +865,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
 
     for (var log in logs) {
-      DateTime logDate = DateTime.parse(log['activity_date']);
+      DateTime logDate = DateTime.parse(log['activity_date']).toLocal();
       DateTime date = DateTime(logDate.year, logDate.month, logDate.day);
       int diff = today.difference(date).inDays;
       if (diff >= 0 && diff < 7) {
