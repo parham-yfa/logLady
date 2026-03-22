@@ -857,12 +857,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           builder: (BuildContext context, StateSetter setModalState) {
             final displayTags = {..._activityTags, ...historicalTags}.toList();
             
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) => SingleChildScrollView(
+                controller: scrollController,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+                  left: 24, right: 24, top: 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)))),
                   const SizedBox(height: 24),
 
@@ -1047,10 +1056,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     ),
                     child: Text(t('save'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
-                  const SizedBox(height: 40),
                 ],
               ), // End of Column
-            ); // End of Padding
+              ), // End of SingleChildScrollView
+            ); // End of DraggableScrollableSheet
           },
         );
       },
@@ -1080,12 +1089,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           builder: (BuildContext context, StateSetter setModalState) {
             final displayTags = {..._activityTags, selectedTag}.toList();
 
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) => SingleChildScrollView(
+                controller: scrollController,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+                  left: 24, right: 24, top: 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)))),
                   const SizedBox(height: 16),
                   Text(t('edit_log'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -1201,8 +1219,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                   const SizedBox(height: 24),
                 ],
-              ),
-            );
+              ), // End of Column
+              ), // End of SingleChildScrollView
+            ); // End of DraggableScrollableSheet
           },
         );
       },
