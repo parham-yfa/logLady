@@ -403,6 +403,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   late Stream<List<Map<String, dynamic>>> _logStream;
   int _lastLogCount = -1;
+  final Set<dynamic> _deletedIds = {};
 
   late AnimationController _chartController;
   late Animation<double> _chartAnimation;
@@ -448,7 +449,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-        final logs = snapshot.data!;
+        final logs = snapshot.data!.where((e) => !_deletedIds.contains(e['id'])).toList();
         if (logs.length != _lastLogCount) {
           _lastLogCount = logs.length;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -697,6 +698,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                 if (confirmed == true) {
                                   try {
                                     await Supabase.instance.client.from('activity_logs').delete().match({'id': log['id']});
+                                    setState(() => _deletedIds.add(log['id']));
                                   } catch (e) {
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('error_delete'))));
@@ -873,6 +875,34 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                   Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)))),
+                  const SizedBox(height: 16),
+
+                  // SAVE BUTTON (top)
+                  ElevatedButton(
+                    onPressed: (selectedTag.isEmpty || selectedDuration == 0) ? null : () async {
+                      try {
+                        await Supabase.instance.client.from('activity_logs').insert({
+                          'activity_date': selectedDate.toIso8601String(),
+                          'type': selectedTag,
+                          'duration': selectedDuration,
+                          'user_id': Supabase.instance.client.auth.currentUser!.id,
+                          if (notesCtrl.text.trim().isNotEmpty) 'notes': notesCtrl.text.trim(),
+                        });
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('error_save'))));
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2D3436),
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                    ),
+                    child: const Text('🪵', style: TextStyle(fontSize: 22)),
+                  ),
                   const SizedBox(height: 24),
 
                   // 0. DATE PICKER
@@ -1207,6 +1237,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     onPressed: () async {
                       try {
                         await Supabase.instance.client.from('activity_logs').delete().match({'id': log['id']});
+                        setState(() => _deletedIds.add(log['id']));
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                         if (context.mounted) {
