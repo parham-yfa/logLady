@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter build:*)",
+      "Bash(MSYS_NO_PATHCONV=1 flutter build:*)",
+      "Bash(node:*)",
+      "Bash(where:*)",
+      "Bash(flutter pub:*)",
+      "Bash(dart run:*)",
+      "Bash(flutter.bat pub:*)",
+      "Bash(cmd:*)",
+      "Bash(powershell:*)"
+    ]
+  }
+}
